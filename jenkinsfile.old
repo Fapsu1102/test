@@ -1,0 +1,77 @@
+gitlink = 'https://git.viettelpost.vn/autotest/vtp_vtp.git'
+
+def runTest(String testsuite) {
+    try {
+        stage("Test ${testsuite}") {
+            sh "echo Kiểm thử tính năng ${testsuite}"
+
+            sh "chmod +x '${env.WORKSPACE}/src/test/resources/webdriver/linux/chromedriver'"
+            sh "sleep 10"
+            sh "mvn clean verify '-Dserenity.outputDirectory=target/site/serenity/${testsuite}' -Dtest=${testsuite}"
+        }
+    }
+
+    catch (e) {
+        echo 'I failed' + e.toString()
+    }
+
+    finally {
+        def current_date = new Date().format('yyyyMMdd')
+        def report_directory = "/var/www/serenity-reports/${current_date}"
+
+        node('ktht-autotest1') {
+            stage("Create ${testsuite} report directory") {
+                sh "echo Tạo đường dẫn lưu báo cáo ${testsuite}"
+              //  sh "sudo chown -R jenkins:jenkins /var/www/serenity-reports"
+                // sh "ls -a /var/www/serenity-reports/"
+                // sh "ls -ld /var/www/serenity-reports/"
+                // sh "rm -rf /var/www/serenity-reports//*"
+               // sh """
+                //    if [ -d ${report_directory} ]; then
+                //        rm -rf ${report_directory}/${testsuite}
+               //      else
+              //          mkdir -p ${report_directory}
+              //          echo "${report_directory} folder created"
+              //      fi
+               // """
+            }
+        }
+
+        stage("Publish ${testsuite} report") {
+            sh "rsync -var ${env.WORKSPACE}/target/site/serenity/* jenkins@192.168.11.44:${report_directory}"
+
+        }
+
+    }
+}
+
+
+def gitcheckout() {
+    stage('Checkout') {
+        checkout([$class           : 'GitSCM',
+                  branches         : [[name: '*/trungnxt']],
+                  extensions       : [[$class: 'CleanBeforeCheckout']],
+                  userRemoteConfigs: [[credentialsId: 'anhtn56', url: gitlink]]])
+    }
+}
+
+
+node('ktht-autotest1') {
+    def userInput = input(id: 'userInput',
+            message: 'Enter comma-separated list of features:',
+            parameters: [string(defaultValue: '', description: 'Comma-separated list of features', name: 'features'),])
+
+    def featuresList = userInput.split(',')
+
+    gitcheckout()
+
+    def parallelStages = [:]
+
+    featuresList.each { feature ->
+        parallelStages[feature] = {
+            runTest(feature.trim())
+        }
+    }
+
+    parallel parallelStages
+}

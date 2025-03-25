@@ -1,3 +1,3 @@
 # test
-hello world war Z
-hehe
+jenkinsfile for automation test with maven and serenity
+
